@@ -71,6 +71,7 @@ public class AddressBook {
     private static final String MESSAGE_COMMAND_HELP_PARAMETERS = "\tParameters: %1$s";
     private static final String MESSAGE_COMMAND_HELP_EXAMPLE = "\tExample: %1$s";
     private static final String MESSAGE_DELETE_PERSON_SUCCESS = "Deleted Person: %1$s";
+    private static final String MESSAGE_EDIT_PERSON_SUCCESS = "Old Person: %1$s \n" + LINE_PREFIX + "New Person: %2$s";
     private static final String MESSAGE_DISPLAY_PERSON_DATA = "%1$s  Phone Number: %2$s  Email: %3$s";
     private static final String MESSAGE_DISPLAY_LIST_ELEMENT_INDEX = "%1$d. ";
     private static final String MESSAGE_GOODBYE = "Exiting Address Book... Good bye!";
@@ -575,31 +576,99 @@ public class AddressBook {
     {
         if (!isEditPersonArgsValid(commandArgs))
             return getMessageForInvalidCommandInput(COMMAND_EDIT_WORD, getUsageInfoForEditCommand());
+
         // try decoding a person from the raw args
-        //
-        final Optional<String[]> decodeResult = decodePersonFromString(commandArgs.substring(2));
+        final Optional<String[]> decodeResult = decodePersonFromString(extractEditInfoFromEditPersonArgs((commandArgs)));
 
-        if (decodeResult.isPresent())
+        if (!decodeResult.isPresent())
         {
-
+           return getMessageForInvalidCommandInput(COMMAND_EDIT_WORD, getUsageInfoForEditCommand());
         }
 
-        return getMessageForSuccessfulEdit(new String[1]);
+        final int targetVisibleIndex = extractTargetIndexFromEditPersonArgs(commandArgs);
+
+        if(!isDisplayIndexValidForLastPersonListingView(targetVisibleIndex))
+        {
+            return MESSAGE_INVALID_PERSON_DISPLAYED_INDEX;
+        }
+
+        // Edit person as specified
+        final String[] targetInModel = getPersonByLastVisibleIndex(targetVisibleIndex);
+        final String[] targetCopy = targetInModel.clone();
+
+        return editPersonFromAddressBook(targetInModel, decodeResult.get()) ? getMessageForSuccessfulEdit(targetCopy, targetInModel)
+                : MESSAGE_PERSON_NOT_IN_ADDRESSBOOK; // not found
     }
 
     /**
+     * Checks validity of edit person argument string's format
+     * Format is [index] [name] p/[phone] e/[email], phone and email positions can be swapped
+     * Name, phone and email can be entered without a space hence minimally 2 elements
      *
+     * @param rawArgs raw command args string for the edit person command
+     * @return whether the input args string is valid
      */
-    private static boolean isEditPersonArgsValid(String rawArgs) {
+    private static boolean isEditPersonArgsValid(String rawArgs)
+    {
+        // INDEX NAME p/PHONE_NUMBER e/EMAIL
+        String[] splitArgs = rawArgs.split(" "); // Minimally of 2 elements
 
-        return false;
+        // check length first as it also checks for empty args
+        return (splitArgs.length > 1) && isDeletePersonArgsValid(Integer.toString(extractTargetIndexFromEditPersonArgs(rawArgs)));
+        // && isPersonDataExtractableFrom(extractEditInfoFromEditPersonArgs(rawArgs)); Not needed as done in decode
     }
 
     /**
+     * Extracts the target's index from raw edit person args string
+     *
+     * @param rawArgs raw command args string for the edit person command
+     * @return extracted index
      */
-    private static String getMessageForSuccessfulEdit(String[] editedPerson)
+    private static int extractTargetIndexFromEditPersonArgs(String rawArgs)
     {
-        return "EdiTED";//String.format(MESSAGE_EDITED,)
+        return Integer.parseInt(rawArgs.split(" ")[0]);
+    }
+
+    /**
+     * Extracts the edited information from the args string by removing the index in rawArgs
+     *
+     * @param rawArgs raw command args string for the edit person command
+     * @return entire string of information with name,phone and email
+     */
+    private static String extractEditInfoFromEditPersonArgs(String rawArgs)
+    {
+        // INDEX NAME p/PHONE_NUMBER e/EMAIL
+        return rawArgs.substring(rawArgs.split(" ")[0].length() + 1);
+    }
+
+    /**
+     * Constructs a feedback message for a successful edit person command execution
+     *
+     * @param oldPerson the targeted person to change
+     * @param newPerson the new info to change to
+     * @return successful delete person feedback emssage
+     * @see #executeEditPerson(String)
+     */
+    private static String getMessageForSuccessfulEdit(String[] oldPerson, String[] newPerson)
+    {
+        return String.format(MESSAGE_EDIT_PERSON_SUCCESS, getMessageForFormattedPersonData(oldPerson), getMessageForFormattedPersonData(newPerson));
+    }
+
+    /**
+     * Edit the specified person form the address book if it is inside. Saves any changes to storage file.
+     *
+     * @param exactPerson the actual person inside the address book (exactPerson == the person to edit in the full list)
+     * @param editInfo the info to be edited to for the person inside the address book (editInfo == the person user entered)
+     * @return true
+     */
+    private static boolean editPersonFromAddressBook(String[] exactPerson, String[] editInfo)
+    {
+        exactPerson[PERSON_DATA_INDEX_NAME] = editInfo[PERSON_DATA_INDEX_NAME];
+        exactPerson[PERSON_DATA_INDEX_PHONE] = editInfo[PERSON_DATA_INDEX_PHONE];
+        exactPerson[PERSON_DATA_INDEX_EMAIL] = editInfo[PERSON_DATA_INDEX_EMAIL];
+
+        savePersonsToFile(getAllPersonsInAddressBook(), storageFilePath);
+        return true;
     }
 
     /**
